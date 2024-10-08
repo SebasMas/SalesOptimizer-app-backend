@@ -14,7 +14,6 @@ class Recomendacion(Base):
         fecha_recomendacion (datetime): Fecha y hora en que se generó la recomendación.
         score (float): Puntuación o relevancia de la recomendación.
         efectiva (bool): Indica si la recomendación resultó en una venta.
-        estrategia_recomendacion (str): Nombre de la estrategia utilizada para generar la recomendación.
         cliente (relationship): Relación con el cliente para el que se generó la recomendación.
         producto_recomendado (relationship): Relación con el producto recomendado.
     """
@@ -27,8 +26,6 @@ class Recomendacion(Base):
     fecha_recomendacion = Column(DateTime, default=datetime.utcnow)
     score = Column(Float, nullable=False)
     efectiva = Column(Boolean, default=False)
-    estrategia_recomendacion = Column(String, nullable=False)
-
     cliente = relationship("Cliente", back_populates="recomendaciones")
     producto_recomendado = relationship("Producto", back_populates="recomendaciones")
 
