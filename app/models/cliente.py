@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+from db.base import Base
 from datetime import datetime
 
 class Cliente(Base):
