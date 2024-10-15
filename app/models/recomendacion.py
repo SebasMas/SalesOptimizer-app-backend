@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Float, DateTime, Boolean, ForeignKey, String
 from sqlalchemy.orm import relationship
-from db.base import Base
+from app.db.base import Base
 from datetime import datetime
 
 class Recomendacion(Base):
@@ -28,6 +28,7 @@ class Recomendacion(Base):
     efectiva = Column(Boolean, default=False)
     cliente = relationship("Cliente", back_populates="recomendaciones")
     producto_recomendado = relationship("Producto", back_populates="recomendaciones")
+    
 
     def __repr__(self):
         return f"<Recomendacion(id={self.id}, cliente_id={self.cliente_id}, producto_recomendado_id={self.producto_recomendado_id}, score={self.score}, efectiva={self.efectiva})>"

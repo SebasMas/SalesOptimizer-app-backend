@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
-from db.base import Base
+from app.db.base import Base
 from datetime import datetime
 
 class Cliente(Base):
@@ -27,6 +27,7 @@ class Cliente(Base):
     activo = Column(Boolean, default=True)
 
     historial_compras = relationship("Venta", back_populates="cliente")
+    recomendaciones = relationship("Recomendacion", back_populates="cliente")
 
     def __repr__(self):
         return f"<Cliente(id={self.id}, nombre='{self.nombre}', email='{self.email}')>"

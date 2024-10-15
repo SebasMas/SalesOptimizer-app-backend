@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import relationship
-from db.base import Base
+from app.db.base import Base
 from datetime import datetime
 
 class Producto(Base):
@@ -32,6 +32,9 @@ class Producto(Base):
     baja_rotacion = Column(Boolean, default=False)
 
     detalles_venta = relationship("DetalleVenta", back_populates="producto")
+    recomendaciones = relationship("Recomendacion", back_populates="producto")
+
+
 
     def __repr__(self):
         return f"<Producto(id={self.id}, nombre='{self.nombre}', precio={self.precio}, stock={self.stock})>"
