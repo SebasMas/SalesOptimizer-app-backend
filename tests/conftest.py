@@ -1,25 +1,32 @@
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.db.base import Base
+from sqlalchemy.orm import Session
+from app.db.base import Base, engine
+from app.db.session import SessionLocal
 
-@pytest.fixture(scope="session")
-def engine():
-    return create_engine("sqlite:///:memory:")
-
-@pytest.fixture(scope="session")
-def tables(engine):
-    Base.metadata.create_all(engine)
-    yield
-    Base.metadata.drop_all(engine)
-
-@pytest.fixture
-def db_session(engine, tables):
-    """Returns an sqlalchemy session, and after the test tears down everything properly."""
+@pytest.fixture(scope="function")
+def db_session():
     connection = engine.connect()
     transaction = connection.begin()
-    session = sessionmaker(bind=connection)()
+    session = SessionLocal(bind=connection)
+    
     yield session
+    
     session.close()
     transaction.rollback()
     connection.close()
+
+@pytest.fixture(scope="function")
+def client(db_session):
+    from fastapi.testclient import TestClient
+    from app.main import app, get_db
+
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            db_session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    
+    with TestClient(app) as test_client:
+        yield test_client
