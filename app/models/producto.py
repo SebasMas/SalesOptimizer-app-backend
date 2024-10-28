@@ -18,7 +18,6 @@ class Producto(Base):
         ventas_ultimo_mes (int): Número de ventas en el último mes.
         baja_rotacion (bool): Indica si el producto tiene baja rotación.
     """
-
     __tablename__ = "productos"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -32,9 +31,7 @@ class Producto(Base):
     baja_rotacion = Column(Boolean, default=False)
 
     detalles_venta = relationship("DetalleVenta", back_populates="producto")
-    recomendaciones = relationship("Recomendacion", back_populates="producto")
-
-
+    recomendaciones = relationship("Recomendacion", back_populates="producto_recomendado")  # Cambiado aquí (antes back_populates="producto")
 
     def __repr__(self):
         return f"<Producto(id={self.id}, nombre='{self.nombre}', precio={self.precio}, stock={self.stock})>"
