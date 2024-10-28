@@ -4,4 +4,7 @@ psycopg2
 SQLAlchemy
 python-dotenv
 pydantic[email]
+pydantic_settings
 pytest
+httpx==0.24.1
+faker==19.3.0
