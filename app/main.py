@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.models import cliente, detalle_venta, producto, recomendacion, usuario, venta
 from app.db.base import engine, SessionLocal, Base
-     
+from app.api.endpoints import usuarios, productos #--
+
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 app = FastAPI(title="SalesOptimizer API", version="0.1.0")
+app.include_router(usuarios.router, prefix="/usuarios", tags=["usuarios"]) #--
+app.include_router(productos.router, prefix="/productos", tags=["productos"])  #--
 
 # Dependency
 def get_db():
