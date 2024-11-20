@@ -4,7 +4,12 @@ psycopg2
 SQLAlchemy
 python-dotenv
 pydantic[email]
-pydantic_settings
-pytest
+pydantic-settings>=2.0.0
+pytest>=7.0.0
 httpx==0.24.1
 faker==19.3.0
+python-jose[cryptography]  # Para manejo de JWT
+passlib[bcrypt]           # Para hashing de contraseñas
+python-multipart          # Para form-data en FastAPI
+httpx                # Para TestClient
+pytest-asyncio       # Para tests asíncronos
