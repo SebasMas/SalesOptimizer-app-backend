@@ -4,6 +4,7 @@ from typing import List, Optional
 import logging
 
 from app.db.session import get_db
+from app.schemas.recomendacion import RecomendacionRequest
 from app.services.recomendacion.sistema_recomendaciones import RecomendacionService
 from app.core.auth import require_vendedor
 
@@ -14,18 +15,14 @@ router = APIRouter()
 
 @router.post("/", response_model=List[dict])
 async def obtener_recomendaciones(
-    cliente_id: int,
-    producto_id: Optional[int] = None,
-    limit: Optional[int] = Query(default=5, le=10, ge=1),
+    request: RecomendacionRequest,
     db: Session = Depends(get_db)
 ):
     """
     Obtiene recomendaciones de productos para un cliente específico.
 
     Args:
-        cliente_id (int): ID del cliente para el que se generarán recomendaciones
-        producto_id (Optional[int]): ID del producto semilla (opcional)
-        limit (Optional[int]): Número máximo de recomendaciones (entre 1 y 10)
+        request (RecomendacionRequest): Datos de la solicitud de recomendaciones
         db (Session): Sesión de base de datos
 
     Returns:
@@ -37,9 +34,9 @@ async def obtener_recomendaciones(
     try:
         servicio_recomendacion = RecomendacionService(db)
         recomendaciones = servicio_recomendacion.generar_recomendaciones(
-            cliente_id=cliente_id,
-            producto_id=producto_id,
-            limit=limit
+            cliente_id=request.cliente_id,
+            producto_id=request.producto_id,
+            limit=request.limit
         )
         return recomendaciones
 
