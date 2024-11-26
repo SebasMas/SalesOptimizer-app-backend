@@ -2,12 +2,13 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sys
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import cliente, detalle_venta, producto, recomendacion, usuario, venta
 from app.db.base import engine, SessionLocal, Base
-from app.api.endpoints import usuarios, productos #--
+from app.api.endpoints import usuarios, productos, auth
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -28,8 +29,20 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 app = FastAPI(title="SalesOptimizer API", version="0.1.0")
-app.include_router(usuarios.router, prefix="/usuarios", tags=["usuarios"]) #--
-app.include_router(productos.router, prefix="/productos", tags=["productos"])  #--
+
+# Configuración de CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, especificar los orígenes permitidos
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Incluir routers
+app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(usuarios.router, prefix="/usuarios", tags=["usuarios"])
+app.include_router(productos.router, prefix="/productos", tags=["productos"])
 
 # Dependency
 def get_db():
@@ -70,6 +83,10 @@ def verify_table_creation():
 
 @app.on_event("startup")
 async def startup_event():
+    """
+    Evento que se ejecuta al iniciar la aplicación.
+    Crea las tablas en la base de datos y verifica su estructura.
+    """
     logger.info("Iniciando la aplicación...")
     Base.metadata.create_all(bind=engine)
     logger.info("Tablas creadas. Verificando estructura de la base de datos...")
@@ -77,12 +94,30 @@ async def startup_event():
 
 @app.get("/")
 def read_root():
+    """
+    Endpoint raíz que retorna un mensaje de bienvenida.
+    
+    Returns:
+        dict: Mensaje de bienvenida
+    """
     return {"message": "Bienvenido a SalesOptimizer API"}
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
+    """
+    Endpoint para verificar el estado de la aplicación.
+    
+    Args:
+        db (Session): Sesión de base de datos
+        
+    Returns:
+        dict: Estado de la aplicación y la base de datos
+        
+    Raises:
+        Exception: Si hay problemas con la base de datos
+    """
     try:
-        # Intenta hacer una consulta simple para verificar la conexión a la base de datos
+        # Intenta hacer una consulta simple para verificar la conexión
         db.execute("SELECT 1")
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
