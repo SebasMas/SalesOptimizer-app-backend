@@ -1,61 +1,38 @@
+import os
 from datetime import datetime, timedelta
-from typing import Any, Union, Optional
+from typing import Any, Dict, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordBearer
 from fastapi import HTTPException, status
-import os
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
 
 # Configuración de seguridad
-SECRET_KEY = os.getenv("SECRET_KEY") or "SOB2024"
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Configuración de la encriptación de contraseñas
+# Contexto para el hashing de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Configuración del esquema OAuth2
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 class SecurityError(Exception):
     """
-    Clase base para excepciones de seguridad.
+    Excepción personalizada para errores de seguridad.
     
     Attributes:
-        message (str): Mensaje de error
-        status_code (int): Código de estado HTTP
+        message (str): Mensaje descriptivo del error
+        status_code (int): Código de estado HTTP correspondiente
     """
-    def __init__(self, message: str, status_code: int = 400):
+    def __init__(self, message: str, status_code: int = status.HTTP_401_UNAUTHORIZED):
         self.message = message
         self.status_code = status_code
         super().__init__(self.message)
 
-def verificar_password(password_plano: str, password_hash: str) -> bool:
-    """
-    Verifica si una contraseña en texto plano coincide con su hash.
-    
-    Args:
-        password_plano (str): Contraseña en texto plano a verificar
-        password_hash (str): Hash de la contraseña almacenada
-        
-    Returns:
-        bool: True si la contraseña coincide, False en caso contrario
-    """
-    try:
-        return pwd_context.verify(password_plano, password_hash)
-    except Exception as e:
-        raise SecurityError(
-            message="Error al verificar la contraseña",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        ) from e
-
 def get_password_hash(password: str) -> str:
     """
-    Genera el hash de una contraseña.
+    Genera un hash seguro de la contraseña proporcionada.
     
     Args:
         password (str): Contraseña en texto plano
@@ -64,47 +41,69 @@ def get_password_hash(password: str) -> str:
         str: Hash de la contraseña
         
     Raises:
-        SecurityError: Si hay un error al generar el hash
+        SecurityError: Si ocurre un error durante el proceso de hashing
     """
     try:
         return pwd_context.hash(password)
     except Exception as e:
         raise SecurityError(
-            message="Error al generar el hash de la contraseña",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        ) from e
+            f"Error al generar hash de contraseña: {str(e)}",
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-def crear_token_acceso(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def verificar_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verifica si una contraseña coincide con su hash.
+    
+    Args:
+        plain_password (str): Contraseña en texto plano
+        hashed_password (str): Hash de la contraseña almacenado
+        
+    Returns:
+        bool: True si la contraseña coincide, False en caso contrario
+        
+    Raises:
+        SecurityError: Si ocurre un error durante la verificación
+    """
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        raise SecurityError(
+            f"Error al verificar contraseña: {str(e)}",
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+def crear_token_acceso(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """
     Crea un token JWT de acceso.
     
     Args:
-        data (dict): Datos a codificar en el token
+        data (Dict[str, Any]): Datos a incluir en el token
         expires_delta (Optional[timedelta]): Tiempo de expiración del token
         
     Returns:
         str: Token JWT generado
         
     Raises:
-        SecurityError: Si hay un error al crear el token
+        SecurityError: Si ocurre un error durante la generación del token
     """
     try:
         to_encode = data.copy()
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.utcnow() + timedelta(minutes=15)
             
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt
     except Exception as e:
         raise SecurityError(
-            message="Error al crear el token de acceso",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        ) from e
+            f"Error al crear token de acceso: {str(e)}",
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-def verificar_token_acceso(token: str) -> dict:
+def verificar_token_acceso(token: str) -> Dict[str, Any]:
     """
     Verifica y decodifica un token JWT.
     
@@ -112,44 +111,33 @@ def verificar_token_acceso(token: str) -> dict:
         token (str): Token JWT a verificar
         
     Returns:
-        dict: Datos decodificados del token
+        Dict[str, Any]: Payload del token decodificado
         
     Raises:
         SecurityError: Si el token es inválido o ha expirado
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise SecurityError(
-                message="Token de acceso inválido",
-                status_code=status.HTTP_401_UNAUTHORIZED
-            )
+        if not payload:
+            raise SecurityError("No se pudo validar credenciales")
         return payload
     except JWTError as e:
+        raise SecurityError(f"Token JWT inválido: {str(e)}")
+    except Exception as e:
         raise SecurityError(
-            message="Token de acceso inválido o expirado",
-            status_code=status.HTTP_401_UNAUTHORIZED
-        ) from e
+            f"Error al verificar token: {str(e)}",
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-def get_token_data(token: str) -> dict[str, Any]:
+def validate_token_scopes(required_scopes: list[str], token_scopes: list[str]) -> bool:
     """
-    Obtiene los datos almacenados en un token JWT.
+    Valida que el token tenga los scopes requeridos.
     
     Args:
-        token (str): Token JWT
+        required_scopes (list[str]): Lista de scopes requeridos
+        token_scopes (list[str]): Lista de scopes del token
         
     Returns:
-        dict[str, Any]: Datos almacenados en el token
-        
-    Raises:
-        SecurityError: Si hay un error al decodificar el token
+        bool: True si el token tiene los scopes requeridos, False en caso contrario
     """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError as e:
-        raise SecurityError(
-            message="Error al decodificar el token",
-            status_code=status.HTTP_401_UNAUTHORIZED
-        ) from e
+    return all(scope in token_scopes for scope in required_scopes)
