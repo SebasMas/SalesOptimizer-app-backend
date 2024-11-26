@@ -41,3 +41,15 @@ class Recomendacion(RecomendacionBase):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+class RecomendacionRequest(BaseModel):
+    """
+    Modelo de datos para la solicitud de recomendaciones.
+
+    Attributes:
+        cliente_id (int): ID del cliente para el que se generarán recomendaciones
+        producto_id (Optional[int]): ID del producto semilla (opcional)
+        limit (Optional[int]): Número máximo de recomendaciones a retornar
+    """
+    cliente_id: int = Field(..., gt=0, description="ID del cliente")
+    producto_id: Optional[int] = Field(None, gt=0, description="ID del producto semilla")
+    limit: Optional[int] = Field(5, ge=1, le=10, description="Número máximo de recomendaciones")
