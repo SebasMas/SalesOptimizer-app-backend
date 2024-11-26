@@ -1,22 +1,19 @@
 from datetime import timedelta
-from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import logging
 
 from app.core.security import (
-    verificar_password,
     get_password_hash,
+    verificar_password,
     crear_token_acceso,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from app.core.auth import get_current_active_user
-from app.schemas.auth import Token, UserRegister, UserResponse
+from app.schemas.auth import UserRegister, UserResponse, Token
 from app.models.usuario import Usuario
 from app.db.session import get_db
 
-# Configuración del logger
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -25,140 +22,118 @@ async def register_user(
     *,
     db: Session = Depends(get_db),
     user_in: UserRegister
-) -> Any:
+) -> Usuario:
     """
-    Endpoint para registrar un nuevo usuario.
+    Registra un nuevo usuario en el sistema.
     
     Args:
-        db (Session): Sesión de base de datos
-        user_in (UserRegister): Datos del usuario a registrar
+        db: Sesión de base de datos
+        user_in: Datos del usuario a registrar
         
     Returns:
-        Usuario: Usuario creado
+        Usuario: El usuario registrado
         
     Raises:
         HTTPException: Si el email o username ya están registrados
     """
     try:
-        # Verificar si el email ya está registrado
+        # Verificar email duplicado
         if db.query(Usuario).filter(Usuario.email == user_in.email).first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Este email ya está registrado"
             )
         
-        # Verificar si el username ya está registrado
+        # Verificar username duplicado
         if db.query(Usuario).filter(Usuario.username == user_in.username).first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Este nombre de usuario ya está registrado"
             )
-        
-        # Crear el usuario
-        user = Usuario(
+
+        # Crear nuevo usuario
+        db_user = Usuario(
             email=user_in.email,
             username=user_in.username,
             password=get_password_hash(user_in.password),
             rol=user_in.rol
         )
-        
-        db.add(user)
+        db.add(db_user)
         db.commit()
-        db.refresh(user)
+        db.refresh(db_user)
         
-        logger.info(f"Usuario registrado exitosamente: {user.username}")
-        return user
+        return db_user
         
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
-        logger.error(f"Error al registrar usuario: {str(e)}")
         db.rollback()
+        logger.error(f"Error al registrar usuario: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor al registrar usuario"
+            detail="Error interno del servidor"
         )
 
 @router.post("/login", response_model=Token)
 async def login_access_token(
     db: Session = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
-) -> Any:
+) -> Token:
     """
-    Endpoint para obtener el token de acceso OAuth2 usando credenciales de usuario.
+    OAuth2 compatible token login, devuelve un token de acceso JWT.
     
     Args:
-        db (Session): Sesión de base de datos
-        form_data (OAuth2PasswordRequestForm): Formulario con username y password
+        db: Sesión de base de datos
+        form_data: Datos del formulario OAuth2
         
     Returns:
         Token: Token de acceso JWT
         
     Raises:
-        HTTPException: Si las credenciales son inválidas
+        HTTPException: Si las credenciales son inválidas o el usuario está inactivo
     """
     try:
-        # Buscar usuario por email (permitimos login con email o username)
+        # Buscar usuario por email o username
         user = None
         if "@" in form_data.username:
             user = db.query(Usuario).filter(Usuario.email == form_data.username).first()
         else:
             user = db.query(Usuario).filter(Usuario.username == form_data.username).first()
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Usuario o contraseña incorrectos",
+                detail="Credenciales incorrectas",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            
+
         if not verificar_password(form_data.password, user.password):
-            logger.warning(f"Intento de login fallido para usuario: {form_data.username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Usuario o contraseña incorrectos",
+                detail="Credenciales incorrectas",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            
+
         if not user.activo:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="Usuario inactivo"
             )
-        
-        # Crear token de acceso
+
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        token = crear_token_acceso(
+        access_token = crear_token_acceso(
             data={"sub": user.username, "rol": user.rol},
             expires_delta=access_token_expires
         )
-        
-        logger.info(f"Login exitoso para usuario: {user.username}")
-        return {
-            "access_token": token,
-            "token_type": "bearer"
-        }
+
+        return Token(access_token=access_token, token_type="bearer")
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error en el proceso de login: {str(e)}")
+        logger.error(f"Error en login: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor durante el login"
+            detail="Error interno del servidor"
         )
-
-@router.get("/me", response_model=UserResponse)
-async def read_users_me(
-    current_user: Usuario = Depends(get_current_active_user)
-) -> Any:
-    """
-    Endpoint para obtener información del usuario actual.
-    
-    Args:
-        current_user (Usuario): Usuario actual (inyectado por dependencia)
-        
-    Returns:
-        Usuario: Información del usuario actual
-    """
-    return current_user
