@@ -171,44 +171,60 @@ class DataSeeder:
             Dict: Datos de la venta creada
         """
         try:
-            # Seleccionar productos aleatorios para la venta (1-5 productos)
+            # Verifica que existan productos disponibles para la venta
+            if not productos:
+                raise ValueError("No hay productos disponibles para crear la venta")
+            
+            # Selecciona aleatoriamente entre 1 y 5 productos para la venta
+            # La función min asegura no seleccionar más productos de los disponibles
             productos_venta = random.sample(productos, min(random.randint(1, 5), len(productos)))
             
-            # Calcular total y crear detalles
+            # Inicializa las listas y variables para almacenar los detalles
             detalles_venta = []
             total = 0
             
+            # Procesa cada producto seleccionado para la venta
             for producto in productos_venta:
+                # Genera una cantidad aleatoria entre 1 y 3 unidades
                 cantidad = random.randint(1, 3)
-                precio_unitario = producto['precio']
+                # Convierte el precio a float para los cálculos
+                precio_unitario = float(producto['precio'])
+                # Calcula el subtotal para este producto
                 subtotal = cantidad * precio_unitario
+                # Acumula al total de la venta
                 total += subtotal
                 
+                # Agrega los detalles de este producto a la lista
                 detalles_venta.append({
                     "producto_id": producto['id'],
                     "cantidad": cantidad,
                     "precio_unitario": precio_unitario
                 })
 
-            # Crear datos de la venta
+            # Construye el objeto de datos de la venta
             venta_data = {
                 "cliente_id": cliente_id,
-                "total": round(total, 2),
-                "estado": random.choice(['completada', 'pendiente', 'cancelada']),
+                "total": round(total, 2),  # Redondea a 2 decimales
+                "estado": random.choice(['completada', 'pendiente', 'cancelada']),  # Estado aleatorio
                 "detalles_venta": detalles_venta
             }
 
+            # Realiza la petición POST al endpoint de ventas
             response = await self.client.post(
                 f"{self.base_url}/ventas/",
                 json=venta_data
             )
+            # Verifica si hubo errores en la respuesta
             response.raise_for_status()
+            # Convierte la respuesta a JSON
             venta_creada = response.json()
+            # Registra la creación exitosa en el log
             logger.info(f"Venta creada para cliente {cliente_id}: ${total:.2f}")
+            # Retorna la venta creada
             return venta_creada
 
         except httpx.HTTPError as e:
-            logger.error(f"Error creando venta: {str(e)}")
+            logger.error(f"Error HTTP creando venta: {str(e)}\nStatus: {e.response.status_code if hasattr(e, 'response') else 'No response'}\nDetalle: {e.response.text if hasattr(e, 'response') else 'No details'}")
             raise
 
     async def create_historial_compras(self, cliente_id: int, productos: List[Dict], num_ventas: int = None) -> List[Dict]:
