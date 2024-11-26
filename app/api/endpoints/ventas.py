@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -9,12 +10,17 @@ from app.models.detalle_venta import DetalleVenta as DetalleVentaModel
 from app.models.producto import Producto as ProductoModel
 from app.models.cliente import Cliente as ClienteModel
 from app.db.session import get_db
-from app.core.auth import require_vendedor  # Asumiendo que solo vendedores pueden crear ventas
+from app.core.auth import require_vendedor
+import logging
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 @router.post("/", response_model=Venta)
-@require_vendedor
+# @require_vendedor
 async def create_venta(venta: VentaCreate, db: Session = Depends(get_db)):
     """
     Crea una nueva venta con sus detalles.
@@ -30,69 +36,61 @@ async def create_venta(venta: VentaCreate, db: Session = Depends(get_db)):
         HTTPException: Si el cliente no existe, si algún producto no existe,
                       o si no hay suficiente stock
     """
-    # Verificar que el cliente existe
-    cliente = db.query(ClienteModel).filter(ClienteModel.id == venta.cliente_id).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado")
-
-    # Crear la venta primero
-    db_venta = VentaModel(
-        cliente_id=venta.cliente_id,
-        total=venta.total,
-        estado=venta.estado,
-        fecha_venta=venta.fecha_venta if venta.fecha_venta else None
-    )
-    db.add(db_venta)
-    db.flush()  # Para obtener el ID de la venta
-
-    # Procesar los detalles de la venta
-    total_calculado = Decimal('0')
-    for detalle in venta.detalles_venta:
-        # Verificar que el producto existe y hay suficiente stock
-        producto = db.query(ProductoModel).filter(ProductoModel.id == detalle.producto_id).first()
-        if not producto:
-            db.rollback()
-            raise HTTPException(status_code=404, detail=f"Producto {detalle.producto_id} no encontrado")
-        
-        if producto.stock < detalle.cantidad:
-            db.rollback()
-            raise HTTPException(
-                status_code=400,
-                detail=f"Stock insuficiente para el producto {producto.nombre}"
-            )
-
-        # Crear el detalle de venta
-        subtotal = Decimal(str(detalle.cantidad)) * Decimal(str(detalle.precio_unitario))
-        total_calculado += subtotal
-
-        db_detalle = DetalleVentaModel(
-            venta_id=db_venta.id,
-            producto_id=detalle.producto_id,
-            cantidad=detalle.cantidad,
-            precio_unitario=detalle.precio_unitario
-        )
-        db.add(db_detalle)
-
-        # Actualizar el stock del producto
-        producto.stock -= detalle.cantidad
-        # Actualizar ventas_ultimo_mes
-        producto.ventas_ultimo_mes += detalle.cantidad
-
-    # Verificar que el total calculado coincide con el total proporcionado
-    if abs(total_calculado - Decimal(str(venta.total))) > Decimal('0.01'):
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="El total proporcionado no coincide con el calculado"
-        )
-
     try:
+        # Verificar que el cliente existe
+        cliente = db.query(ClienteModel).filter(ClienteModel.id == venta.cliente_id).first()
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        # Crear la venta
+        db_venta = VentaModel(
+            cliente_id=venta.cliente_id,
+            total=venta.total,
+            estado=venta.estado,
+            fecha_venta=datetime.now()  # Siempre usar la fecha actual
+        )
+        db.add(db_venta)
+        db.flush()
+
+        # Procesar los detalles de la venta
+        for detalle in venta.detalles_venta:
+            # Verificar que el producto existe y hay suficiente stock
+            producto = db.query(ProductoModel).filter(ProductoModel.id == detalle.producto_id).first()
+            if not producto:
+                db.rollback()
+                raise HTTPException(status_code=404, detail=f"Producto {detalle.producto_id} no encontrado")
+            
+            if producto.stock < detalle.cantidad:
+                db.rollback()
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Stock insuficiente para el producto {producto.nombre}"
+                )
+
+            # Crear el detalle de venta
+            db_detalle = DetalleVentaModel(
+                venta_id=db_venta.id,
+                producto_id=detalle.producto_id,
+                cantidad=detalle.cantidad,
+                precio_unitario=detalle.precio_unitario
+            )
+            db.add(db_detalle)
+
+            # Actualizar el stock y ventas del producto
+            producto.stock -= detalle.cantidad
+            producto.ventas_ultimo_mes += detalle.cantidad
+
         db.commit()
         db.refresh(db_venta)
         return db_venta
+
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error creando venta: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=List[Venta])
 async def read_ventas(
