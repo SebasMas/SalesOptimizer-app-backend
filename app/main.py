@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import cliente, detalle_venta, producto, recomendacion, usuario, venta
 from app.db.base import engine, SessionLocal, Base
-from app.api.endpoints import usuarios, productos, auth
+from app.api.endpoints import clientes, usuarios, productos, auth
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])
 app.include_router(usuarios.router, prefix="/usuarios", tags=["usuarios"])
 app.include_router(productos.router, prefix="/productos", tags=["productos"])
+app.include_router(clientes.router, prefix="/clientes", tags=["clientes"])
 
 # Dependency
 def get_db():
