@@ -18,13 +18,22 @@ class VentaBase(BaseModel):
         if v.lower() not in estados_validos:
             raise ValueError(f'Estado debe ser uno de: {", ".join(estados_validos)}')
         return v.lower()
+class DetalleVentaCreate(BaseModel):
+    producto_id: int
+    cantidad: int
+    precio_unitario: float
 
-class VentaCreate(VentaBase):
+class VentaCreate(BaseModel):
     """
-    Esquema para crear una nueva Venta.
-    No incluye campos que se generan automáticamente.
+    Schema para crear una nueva venta
     """
-    pass
+    cliente_id: int
+    total: float
+    estado: str = Field(..., pattern='^(completada|pendiente|cancelada)$')
+    fecha_venta: Optional[datetime] = None
+    detalles_venta: List[DetalleVentaCreate]
+
+
 
 class VentaUpdate(BaseModel):
     """
