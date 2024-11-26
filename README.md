@@ -45,4 +45,5 @@
 1. Clonar repositorio.
 2. Crear y activar un entorno virtual de Python.
 3. Ejecutar `pip install -r requirements.txt`.
-4. Ejecitar `uvicorn app.main:app --reload`
+4. Crear un archivo `.env` y configurar en este las respectivas variables de entorno.
+5. Ejecitar `uvicorn app.main:app --reload`
