@@ -3,7 +3,7 @@ import random
 from faker import Faker
 from typing import List, Dict
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from pathlib import Path
 import sys
@@ -44,7 +44,6 @@ class DataSeeder:
         self.faker = Faker(['es_ES'])  # Usar locale español
         self.client = httpx.AsyncClient(timeout=30.0)
         
-        # Categorías de productos para usar en la generación
         self.categorias = [
             "Electrónica", "Ropa", "Hogar", "Deportes", "Libros",
             "Juguetes", "Jardín", "Automotriz", "Oficina", "Mascotas"
@@ -53,6 +52,21 @@ class DataSeeder:
     async def close(self):
         """Cierra el cliente HTTP."""
         await self.client.aclose()
+
+    async def get_existing_productos(self) -> List[Dict]:
+        """
+        Obtiene los productos existentes en la base de datos.
+
+        Returns:
+            List[Dict]: Lista de productos existentes
+        """
+        try:
+            response = await self.client.get(f"{self.base_url}/productos/")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error obteniendo productos existentes: {str(e)}")
+            return []
 
     async def create_usuario(self) -> Dict:
         """
@@ -119,30 +133,145 @@ class DataSeeder:
             logger.error(f"Error creando producto: {str(e)}")
             raise
 
-    async def seed_data(self, num_usuarios: int = 10, num_productos: int = 30):
+    async def create_cliente(self) -> Dict:
         """
-        Genera y envía múltiples usuarios y productos a la API.
+        Crea un cliente ficticio y lo envía a la API.
+
+        Returns:
+            Dict: Datos del cliente creado
+        """
+        try:
+            cliente_data = {
+                "nombre": self.faker.name(),
+                "email": self.faker.email(),
+                "telefono": self.faker.phone_number(),
+            }
+
+            response = await self.client.post(
+                f"{self.base_url}/clientes/",
+                json=cliente_data
+            )
+            response.raise_for_status()
+            cliente_creado = response.json()
+            logger.info(f"Cliente creado: {cliente_creado['nombre']}")
+            return cliente_creado
+        except httpx.HTTPError as e:
+            logger.error(f"Error creando cliente: {str(e)}")
+            raise
+
+    async def create_venta(self, cliente_id: int, productos: List[Dict]) -> Dict:
+        """
+        Crea una venta con sus detalles.
+
+        Args:
+            cliente_id (int): ID del cliente
+            productos (List[Dict]): Lista de productos disponibles
+
+        Returns:
+            Dict: Datos de la venta creada
+        """
+        try:
+            # Seleccionar productos aleatorios para la venta (1-5 productos)
+            productos_venta = random.sample(productos, min(random.randint(1, 5), len(productos)))
+            
+            # Calcular total y crear detalles
+            detalles_venta = []
+            total = 0
+            
+            for producto in productos_venta:
+                cantidad = random.randint(1, 3)
+                precio_unitario = producto['precio']
+                subtotal = cantidad * precio_unitario
+                total += subtotal
+                
+                detalles_venta.append({
+                    "producto_id": producto['id'],
+                    "cantidad": cantidad,
+                    "precio_unitario": precio_unitario
+                })
+
+            # Crear datos de la venta
+            venta_data = {
+                "cliente_id": cliente_id,
+                "total": round(total, 2),
+                "estado": random.choice(['completada', 'pendiente', 'cancelada']),
+                "detalles_venta": detalles_venta
+            }
+
+            response = await self.client.post(
+                f"{self.base_url}/ventas/",
+                json=venta_data
+            )
+            response.raise_for_status()
+            venta_creada = response.json()
+            logger.info(f"Venta creada para cliente {cliente_id}: ${total:.2f}")
+            return venta_creada
+
+        except httpx.HTTPError as e:
+            logger.error(f"Error creando venta: {str(e)}")
+            raise
+
+    async def create_historial_compras(self, cliente_id: int, productos: List[Dict], num_ventas: int = None) -> List[Dict]:
+        """
+        Crea un historial de compras para un cliente.
+
+        Args:
+            cliente_id (int): ID del cliente
+            productos (List[Dict]): Lista de productos disponibles
+            num_ventas (int, optional): Número de ventas a crear. Si es None, será aleatorio entre 1-10
+
+        Returns:
+            List[Dict]: Lista de ventas creadas
+        """
+        if num_ventas is None:
+            num_ventas = random.randint(1, 10)
+            
+        ventas = []
+        for _ in range(num_ventas):
+            try:
+                venta = await self.create_venta(cliente_id, productos)
+                ventas.append(venta)
+                # Pequeña pausa para no sobrecargar la API
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Error creando historial de compras: {str(e)}")
+                continue
+        return ventas
+
+    async def seed_data(self, num_usuarios: int = 10, num_productos: int = 30, num_clientes: int = 20):
+        """
+        Genera y envía múltiples registros a la API.
 
         Args:
             num_usuarios (int): Número de usuarios a crear
             num_productos (int): Número de productos a crear
+            num_clientes (int): Número de clientes a crear
         """
         try:
-            logger.info(f"Iniciando la generación de {num_usuarios} usuarios y {num_productos} productos...")
-            
-            # Crear usuarios
-            usuarios_tasks = [self.create_usuario() for _ in range(num_usuarios)]
-            usuarios_creados = await asyncio.gather(*usuarios_tasks, return_exceptions=True)
-            
-            usuarios_exitosos = [u for u in usuarios_creados if not isinstance(u, Exception)]
-            logger.info(f"Usuarios creados exitosamente: {len(usuarios_exitosos)}/{num_usuarios}")
+            logger.info("Iniciando proceso de seeding...")
 
-            # Crear productos
-            productos_tasks = [self.create_producto() for _ in range(num_productos)]
-            productos_creados = await asyncio.gather(*productos_tasks, return_exceptions=True)
-            
-            productos_exitosos = [p for p in productos_creados if not isinstance(p, Exception)]
-            logger.info(f"Productos creados exitosamente: {len(productos_exitosos)}/{num_productos}")
+            # Obtener productos existentes o crear nuevos
+            productos_existentes = await self.get_existing_productos()
+            if not productos_existentes:
+                # Crear productos solo si no existen
+                productos_tasks = [self.create_producto() for _ in range(num_productos)]
+                productos_creados = await asyncio.gather(*productos_tasks, return_exceptions=True)
+                productos_existentes = [p for p in productos_creados if not isinstance(p, Exception)]
+
+            # Crear clientes y su historial de compras
+            clientes_tasks = [self.create_cliente() for _ in range(num_clientes)]
+            clientes_creados = await asyncio.gather(*clientes_tasks, return_exceptions=True)
+            clientes_exitosos = [c for c in clientes_creados if not isinstance(c, Exception)]
+
+            # Crear historial de compras para cada cliente
+            for cliente in clientes_exitosos:
+                await self.create_historial_compras(cliente['id'], productos_existentes)
+
+            logger.info(f"""
+                Proceso completado:
+                - Productos disponibles: {len(productos_existentes)}
+                - Clientes creados: {len(clientes_exitosos)}
+            """)
 
         except Exception as e:
             logger.error(f"Error general en seed_data: {str(e)}")
@@ -154,7 +283,7 @@ async def main():
     """Función principal para ejecutar el seeder."""
     try:
         seeder = DataSeeder()
-        await seeder.seed_data(num_usuarios=10, num_productos=30)
+        await seeder.seed_data(num_usuarios=10, num_productos=30, num_clientes=20)
         
     except Exception as e:
         logger.error(f"Error en la ejecución principal: {str(e)}")
