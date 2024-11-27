@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import cliente, detalle_venta, producto, recomendacion, usuario, venta
 from app.db.base import engine, SessionLocal, Base
-from app.api.endpoints import clientes, recomendaciones, usuarios, productos, auth, ventas
+from app.api.endpoints import clientes, recomendaciones, seed, usuarios, productos, auth, ventas
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +46,7 @@ app.include_router(productos.router, prefix="/productos", tags=["productos"])
 app.include_router(clientes.router, prefix="/clientes", tags=["clientes"])
 app.include_router(ventas.router, prefix="/ventas", tags=["ventas"])
 app.include_router(recomendaciones.router, prefix="/recomendaciones", tags=["recomendaciones"])
+app.include_router(seed.router, prefix="/seeding", tags=["seeding"])
 
 # Dependency
 def get_db():
