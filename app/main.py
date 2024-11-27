@@ -46,7 +46,7 @@ app.include_router(productos.router, prefix="/productos", tags=["productos"])
 app.include_router(clientes.router, prefix="/clientes", tags=["clientes"])
 app.include_router(ventas.router, prefix="/ventas", tags=["ventas"])
 app.include_router(recomendaciones.router, prefix="/recomendaciones", tags=["recomendaciones"])
-app.include_router(seed.router, prefix="/seed", tags=["seed"])
+app.include_router(seed.router, prefix="/seed", tags=["seeding"])
 
 # Dependency
 def get_db():

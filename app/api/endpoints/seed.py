@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 is_seeding = False
 
-@router.post("/seed")
+@router.post("/")
 async def seed_database(
     background_tasks: BackgroundTasks,
     force: bool = False,
@@ -71,7 +71,7 @@ async def seed_database(
         logger.error(f"Error iniciando seeding: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/seed/status")
+@router.get("/status")
 async def get_seed_status():
     """Retorna el estado actual del proceso de seeding."""
     return {"is_running": is_seeding}
